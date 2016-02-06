@@ -1,0 +1,93 @@
+--- 
+title: 'Machine Learning Class Project: Predicting Weight Lifting Techniques by Accelerometers'
+author: "J Gross"
+date: "January 31 2016"
+output: html_document
+---
+
+##Executive Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project we will train a model to interpret actual values from accelerometers on the belt, forearm, arm, and dumbell of the six participatns.  Using actual values from validation and test datasets, we will then predict which of the five different exercises were being performed. 
+
+The data and research protocol are available at http://groupware.les.inf.puc-rio.br/har 
+
+##Data characterization
+The training data consisted of 160 variables and 19,623 observations in csv files.   Many of the variables were obviously of little predictive values.   These included timestamps, very spasely populated variables, and non-varying variables.  I researched the capabilities of the  caret preProcessor to elimate these variables from the analysis, but it only seemed to offer nearzeroVariable suppression.  There are some great scripts on the internet that automate a tidying process like this, but this course project seemed to emphasize original content, so I ruled out referencing those.   In the end,  I opted to manually curate the variables down to actual numeric data columns, and expected the advanced algorithms (Random Forest and Boosting)  to optimize the predictors.  There were a total of 53 predictors:
+
+###Figure 1: Data Selection and preparation of Train, Validation, and Test datasets
+``` 
+trainingData <- read.csv("pml-training.csv", na.strings=c("", "NA", "NULL"), header=TRUE)
+#Set all to numeric except the predicted variable classe, at the end of the row.  The read.csv call was creating factors
+trainingData[,-160] <- data.frame(sapply(trainingData[,-160],as.numeric)) 
+
+#Subset down to desired data columns and assiging 75% to the training set
+trainingData <- trainingData[,c(7:11,37:49,60:68,84:86,102,113:124,140,151:160)]
+inTrain = createDataPartition(trainingData$classe, p = 3/4)[[1]]
+training = trainingData[ inTrain,]
+validation  = trainingData[-inTrain,]
+
+#Testing data was provided separately by the project sponsors and did NOT include the predicted attribute classe
+testing <- read.csv("pml-testing.csv",  na.strings=c("", "NA", "NULL") , header=TRUE)
+testing  <- data.frame(sapply(testing ,as.numeric))
+testing <- testing[,c(7:11,37:49,60:68,84:86,102,113:124,140,151:160)]
+
+```
+ 
+##Model selection  
+There were ample observations upon which to train the model.  In fact, the more advanced models ran quite slowly, sometimes for hours.   Rather than reduce the number of iterations (in itself, this is an iterative process that would have taken days), I decided to persist the models once they were able to predict on the training and validation datasets with acceptable accuracy. At development time,  I would manually "save" a successful model, then simply uncomment either the "train" command or the "load" command in the script and continue with interactive data exploration. 
+
+I used the caret package to execute the rpart, gbm, and rf methods,  all three of which resulted in tree-based classifiers.  The code for Random Forest looks like this:
+
+###Figure 2: Model building and summary statistics
+``` 
+#Random forest -- use with the train or the load command, not both
+#ModelfitRF <- train(classe ~  .,  method="rf",  preProcess=(method="nzv"), data=training)
+load("ModelfitRF.rda")
+
+print(ModelfitRF)
+print(ModelfitRF$finalModel)
+
+plotRF <- plot(ModelfitRF$finalModel,  main="Classification RandomForest")
+```
+
+The RPart command executed in minutes, but did not provide good accuracy, about 55% on the training set:
+
+``` 
+  cp          Accuracy   Kappa       Accuracy SD  Kappa SD  
+  0.03845058  0.5492124  0.42568831  0.02443101   0.03570891
+``` 
+
+GBM executed in tens of minutes and provided an significant increase in accuracy on the training set, to 98%. 
+
+Random Forest took the longest to execute (hours under the caret package) but provides exceptional accuracy at an intermediate level of iterations to over 99%:  
+``` 
+  mtry  Accuracy   Kappa      Accuracy SD   Kappa SD    
+  27    0.9962656  0.9952767  0.0007714091  0.0009754973
+``` 
+
+##Predictions
+I used Random Forest as the primary tool to complete the project.  On the validation set it also acheived 99% accuracy:
+
+###Figure 3: Predictions
+``` 
+predValidateRF<- predict(ModelfitRF, validation)
+confusionMatrix(validation$classe, predValidateRF)
+Confusion Matrix and Statistics
+
+...
+               Accuracy : 0.9967          
+                 95% CI : (0.9947, 0.9981)
+```
+         
+When applying the Random Forest model against the testing dataset,  the following command was used;
+``` 
+  predTestingRF <- predict(ModelfitRF, testing)
+``` 
+
+This produced a vector of 20 factors,  "A"-"E".   I typed these into the Coursera Assignement and all twenty answers were correct.
+                
+
+##Cross Validation
+Random Forest inherently performs Cross Validation on the training set by virtue of the way it iteratively subsets and recombines the observations.  In addition,  the 25% portion of the supplied Training data, called the "validation" dataframe in the script, demonstrated high prediction accuracy.   The blind Test dataset only contained 20 observations, but the prediction against it was scored as 100% accurate.
+
+
+ 
